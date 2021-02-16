@@ -1,7 +1,11 @@
+extern crate html_escape;
+
 use serde::Deserialize;
 use reqwest::Error;
 use std::env;
 use std::process;
+use rand::thread_rng;
+use rand::seq::SliceRandom;
 
 #[derive(Deserialize, Debug)]
 struct Quiz {
@@ -51,7 +55,22 @@ async fn main() -> Result<(), Error> {
     );
     let response = reqwest::get(&request_url).await?;
 
-    let quiz_questions = response.json::<Quiz>().await?;
-    println!("{:?}", quiz_questions);
+    let quiz_response = response.json::<Quiz>().await?;
+    let questions = quiz_response.results;
+
+    for question in questions {
+        println!("QUESTION: {}", html_escape::decode_html_entities(&question.question));
+        
+        println!("ANSWER: {}", html_escape::decode_html_entities(&question.correct_answer));
+        let mut answers = vec![question.correct_answer];
+        answers.extend_from_slice(&question.incorrect_answers);
+        answers.shuffle(&mut thread_rng());
+        println!("OPTIONS:");
+        for answer in answers {
+            println!("{}", html_escape::decode_html_entities(&answer));
+        }
+        println!();
+    }
+
     Ok(())
 }
