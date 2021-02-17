@@ -3,9 +3,9 @@ extern crate html_escape;
 use serde::Deserialize;
 use reqwest::Error;
 use std::env;
-use std::process;
 use rand::thread_rng;
 use rand::seq::SliceRandom;
+use text_io::read;
 
 #[derive(Deserialize, Debug)]
 struct Quiz {
@@ -28,25 +28,33 @@ struct Config {
 }
 
 impl Config {
-    fn new(args: &[String]) -> Result<Config, &str> {
-        if args.len() < 3 {
-            return Err("please provide amount of questions and category type.");
+    fn new(args: &[String]) -> Config {
+        let amount: String;
+        let category: String;
+
+        match args.len() {
+            3 => {
+                amount = args[1].clone();
+                category = args[2].clone();
+            },
+            2 => {
+                amount = args[1].clone();
+                category = ask_category();
+            },
+            _ => {
+                amount = ask_amount();
+                category = ask_category();
+            }
         }
 
-        let amount = args[1].clone();
-        let category = args[2].clone();
-
-        Ok(Config { amount, category })
+        Config { amount, category }
     }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     let args: Vec<String> = env::args().collect();
-    let config = Config::new(&args).unwrap_or_else(|err| {
-        println!("Problem parsing arguments: {}", err);
-        process::exit(1);
-    });
+    let config = Config::new(&args);
 
     let request_url = format!(
         "https://opentdb.com/api.php?amount={amount}&category={category}&type=multiple",
@@ -73,4 +81,32 @@ async fn main() -> Result<(), Error> {
     }
 
     Ok(())
+}
+
+fn ask_amount() -> String {
+    let mut amount = String::from("");
+    println!("What's the amount of questions to be asked?");
+
+    while !amount.parse::<i32>().is_ok() {
+        amount = read!("{}\n");
+
+        if !amount.parse::<i32>().is_ok() {
+            println!("Please enter a valid number.")
+        }
+    }
+    amount
+}
+
+fn ask_category() -> String {
+    let mut category = String::from("");
+    println!("What's the category of the questions?");
+
+    while !category.parse::<i32>().is_ok() {
+        category = read!("{}\n");
+
+        if !category.parse::<i32>().is_ok() {
+            println!("Please enter a valid number.")
+        }
+    }
+    category
 }

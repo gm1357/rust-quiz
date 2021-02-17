@@ -12,3 +12,4 @@ tokio = { version = "1", features = ["full"] }
 serde = { version = "1.0.123", features = ["derive"] }
 html-escape = "0.2.6"
 rand = "0.8.3"
+text_io = "0.1.8"
