@@ -1,4 +1,5 @@
 extern crate html_escape;
+extern crate ferris_says;
 
 use serde::Deserialize;
 use reqwest::Error;
@@ -7,7 +8,8 @@ use rand::thread_rng;
 use rand::seq::SliceRandom;
 use text_io::read;
 use std::io;
-use std::io::Write;
+use std::io::{ stdout, BufWriter, Write };
+use ferris_says::say;
 
 #[derive(Deserialize, Debug)]
 struct Quiz {
@@ -61,15 +63,7 @@ async fn main() -> Result<(), Error> {
     let config = Config::new(&args);
     reset_screen();
 
-    let request_url = format!(
-        "https://opentdb.com/api.php?amount={amount}&category={category}&type=multiple",
-        amount = config.amount,
-        category = config.category
-    );
-    let response = reqwest::get(&request_url).await?;
-
-    let quiz_response = response.json::<Quiz>().await?;
-    let questions = quiz_response.results;
+    let questions = get_questions(&config.amount, &config.category).await?;
     let mut correct_guesses = 0;
 
     for question in questions {
@@ -96,8 +90,10 @@ async fn main() -> Result<(), Error> {
         println!();
     }
 
-    println!("You got {} correct answers out of {}.", correct_guesses, config.amount);
-    println!();
+    match config.amount.parse::<i32>() {
+        Ok(total) => show_score(total, correct_guesses),
+        Err(_) => show_score(0, 0)
+    }
 
     Ok(())
 }
@@ -157,4 +153,39 @@ fn ask_answer(answers: &Vec<String>) -> usize {
         }
     }
     answer_index
+}
+
+async fn get_questions(amount: &str, category: &str) -> Result<Vec<Question>, Error> {
+    let request_url = format!(
+        "https://opentdb.com/api.php?amount={amount}&category={category}&type=multiple",
+        amount = amount,
+        category = category
+    );
+    let response = reqwest::get(&request_url).await?;
+    let quiz_response = response.json::<Quiz>().await?;
+
+    return Ok(quiz_response.results);
+}
+
+fn show_score(total: i32, correct_guesses: i32) {
+    println!("You got {} correct answers out of {}.", correct_guesses, total);
+    println!();
+    let average = correct_guesses as f32 / total as f32;
+    let out: &[u8];
+
+    if average == 1.0 {
+        out = b"Congrats! You did perfectly.";
+    } else if average > 0.7 {
+        out = b"Well done! almost got all.";
+    } else if average > 0.4 {
+        out = b"You did okay.";
+    } else if average > 0.0 {
+        out = b"Better than zero.";
+    } else {
+        out = b"Surely you can do better, right?";
+    }
+
+    let width = 24;
+    let mut writer = BufWriter::new(stdout());
+    say(out, width, &mut writer).unwrap();
 }
