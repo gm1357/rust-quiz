@@ -8,6 +8,7 @@ use rand::thread_rng;
 use rand::seq::SliceRandom;
 use text_io::read;
 use std::io;
+use std::str;
 use std::io::{ stdout, BufWriter, Write };
 use ferris_says::say;
 
@@ -26,13 +27,24 @@ struct Question {
     incorrect_answers: Vec<String>
 }
 
+#[derive(Deserialize, Debug)]
+struct Categories {
+    trivia_categories: Vec<Category>
+}
+
+#[derive(Deserialize, Debug)]
+struct Category {
+    id: i32,
+    name: String
+}
+
 struct Config {
     amount: String,
     category: String,
 }
 
 impl Config {
-    fn new(args: &[String]) -> Config {
+    fn new(args: &[String], categories: Vec<Category>) -> Config {
         let amount: String;
         let category: String;
 
@@ -43,11 +55,11 @@ impl Config {
             },
             2 => {
                 amount = args[1].clone();
-                category = ask_category();
+                category = ask_category(categories);
             },
             _ => {
                 amount = ask_amount();
-                category = ask_category();
+                category = ask_category(categories);
             }
         }
 
@@ -59,8 +71,9 @@ impl Config {
 async fn main() -> Result<(), Error> {
     reset_screen();
 
+    let categories = get_categories().await?;
     let args: Vec<String> = env::args().collect();
-    let config = Config::new(&args);
+    let config = Config::new(&args, categories);
     reset_screen();
 
     let questions = get_questions(&config.amount, &config.category).await?;
@@ -85,7 +98,7 @@ async fn main() -> Result<(), Error> {
             correct_guesses += 1;
         } else {
             println!("That's wrong. :(");
-            println!("Answer was: {}", question.correct_answer);
+            println!("Answer was: {}", html_escape::decode_html_entities(&question.correct_answer));
         }
         println!();
     }
@@ -122,15 +135,18 @@ fn ask_amount() -> String {
     amount
 }
 
-fn ask_category() -> String {
+fn ask_category(categories: Vec<Category>) -> String {
     let mut category = String::from("");
-    print_same_line("What's the category of the questions? ");
+    print_same_line("What's the category of the questions? (type '?' to see all)");
+    println!();
 
     while !category.parse::<i32>().is_ok() {
         category = read!("{}\n");
 
-        if !category.parse::<i32>().is_ok() {
-            println!("Please enter a valid number.")
+        if category == "?" {
+            print_categories(&categories);
+        } else if !category.parse::<i32>().is_ok() {
+            println!("Please enter a valid category number.")
         }
     }
     category
@@ -167,6 +183,14 @@ async fn get_questions(amount: &str, category: &str) -> Result<Vec<Question>, Er
     return Ok(quiz_response.results);
 }
 
+async fn get_categories() -> Result<Vec<Category>, Error> {
+    let request_url = format!("https://opentdb.com/api_category.php");
+    let response = reqwest::get(&request_url).await?;
+    let categories = response.json::<Categories>().await?;
+
+    return Ok(categories.trivia_categories);
+}
+
 fn show_score(total: i32, correct_guesses: i32) {
     println!("You got {} correct answers out of {}.", correct_guesses, total);
     println!();
@@ -188,4 +212,15 @@ fn show_score(total: i32, correct_guesses: i32) {
     let width = 24;
     let mut writer = BufWriter::new(stdout());
     say(out, width, &mut writer).unwrap();
+}
+
+fn print_categories(categories: &Vec<Category>) {
+    let mut data: Vec<Vec<String>> = vec![];
+
+    for category in categories {
+        let caregory_vec = vec![category.id.to_string(), category.name.clone()];
+        data.push(caregory_vec);
+    }
+
+    text_tables::render(&mut io::stdout(), data).unwrap();
 }
